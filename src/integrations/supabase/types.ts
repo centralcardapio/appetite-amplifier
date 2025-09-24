@@ -101,6 +101,114 @@ export type Database = {
           },
         ]
       }
+      email_queue: {
+        Row: {
+          created_at: string | null
+          dashboard_link: string | null
+          email: string
+          email_type: string
+          error_message: string | null
+          id: string
+          name: string
+          sent_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          dashboard_link?: string | null
+          email: string
+          email_type?: string
+          error_message?: string | null
+          id?: string
+          name: string
+          sent_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          dashboard_link?: string | null
+          email?: string
+          email_type?: string
+          error_message?: string | null
+          id?: string
+          name?: string
+          sent_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          billing_type: string | null
+          callback_auto_redirect: boolean | null
+          callback_success_url: string | null
+          charge_type: string | null
+          created_at: string | null
+          description: string | null
+          due_date: string | null
+          due_date_limit_days: number | null
+          external_reference: string | null
+          id: string
+          max_installment_count: number | null
+          notification_enabled: boolean | null
+          payment_date: string | null
+          payment_id: string
+          payment_link: string | null
+          plan_name: string
+          status: string
+          updated_at: string | null
+          user_id: string
+          value: number
+        }
+        Insert: {
+          billing_type?: string | null
+          callback_auto_redirect?: boolean | null
+          callback_success_url?: string | null
+          charge_type?: string | null
+          created_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          due_date_limit_days?: number | null
+          external_reference?: string | null
+          id?: string
+          max_installment_count?: number | null
+          notification_enabled?: boolean | null
+          payment_date?: string | null
+          payment_id: string
+          payment_link?: string | null
+          plan_name: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+          value: number
+        }
+        Update: {
+          billing_type?: string | null
+          callback_auto_redirect?: boolean | null
+          callback_success_url?: string | null
+          charge_type?: string | null
+          created_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          due_date_limit_days?: number | null
+          external_reference?: string | null
+          id?: string
+          max_installment_count?: number | null
+          notification_enabled?: boolean | null
+          payment_date?: string | null
+          payment_id?: string
+          payment_link?: string | null
+          plan_name?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+          value?: number
+        }
+        Relationships: []
+      }
       photo_credits: {
         Row: {
           available: number
@@ -170,6 +278,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_styles: {
         Row: {
           created_at: string
@@ -207,6 +336,17 @@ export type Database = {
         Args: { user_id_param: string }
         Returns: number
       }
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       use_credits: {
         Args: {
           credits_to_use: number
@@ -218,7 +358,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -345,6 +485,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const

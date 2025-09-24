@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Image, CreditCard, TrendingUp, Calendar, Star } from "lucide-react";
+import { Users, Image, CreditCard, TrendingUp, Calendar, Star, Shield } from "lucide-react";
 import { MetricsCards } from "@/components/dashboard/MetricsCards";
 import { UsageCharts } from "@/components/dashboard/UsageCharts";
 import { PopularStyles } from "@/components/dashboard/PopularStyles";
 import { RecentTransformations } from "@/components/dashboard/RecentTransformations";
 import { PaymentAnalytics } from "@/components/dashboard/PaymentAnalytics";
+import { MakeAdminButton } from "@/components/MakeAdminButton";
 
 interface DashboardData {
   totalUsers: number;
@@ -30,21 +32,22 @@ interface DashboardData {
 
 const AdminDashboard = () => {
   const { user, loading } = useAuth();
+  const { isAdmin, loading: roleLoading } = useUserRole();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    console.log('AdminDashboard useEffect - user:', user, 'loading:', loading);
-    if (!loading) {
-      if (user) {
-        console.log('User authenticated, fetching dashboard data');
+    console.log('AdminDashboard useEffect - user:', user, 'loading:', loading, 'isAdmin:', isAdmin, 'roleLoading:', roleLoading);
+    if (!loading && !roleLoading) {
+      if (user && isAdmin) {
+        console.log('User authenticated and is admin, fetching dashboard data');
         fetchDashboardData();
       } else {
-        console.log('No user authenticated');
+        console.log('User not authenticated or not admin');
         setIsLoading(false);
       }
     }
-  }, [user, loading]);
+  }, [user, loading, isAdmin, roleLoading]);
 
   const fetchDashboardData = async () => {
     console.log('Starting fetchDashboardData');
@@ -181,9 +184,9 @@ const AdminDashboard = () => {
   };
 
 
-  console.log('AdminDashboard render - loading:', loading, 'isLoading:', isLoading, 'user:', !!user, 'dashboardData:', !!dashboardData);
+  console.log('AdminDashboard render - loading:', loading, 'roleLoading:', roleLoading, 'isLoading:', isLoading, 'user:', !!user, 'isAdmin:', isAdmin, 'dashboardData:', !!dashboardData);
 
-  if (loading || isLoading) {
+  if (loading || roleLoading || isLoading) {
     return (
       <div className="min-h-screen bg-background p-8">
         <div className="max-w-7xl mx-auto space-y-8">
@@ -209,17 +212,36 @@ const AdminDashboard = () => {
     );
   }
 
-  if (!user && !loading) {
+  if (!user || !isAdmin) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="p-8 text-center">
-          <CardContent>
-            <h2 className="text-xl font-semibold mb-2">Acesso Restrito</h2>
-            <p className="text-muted-foreground">
-              Você precisa estar logado para acessar o dashboard administrativo.
-            </p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-background flex items-center justify-center p-8">
+        <div className="w-full max-w-lg">
+          <Card className="text-center mb-6">
+            <CardContent className="pt-6">
+              <Shield className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+              <h2 className="text-xl font-semibold mb-2">Acesso Restrito</h2>
+              <p className="text-muted-foreground mb-4">
+                {!user ? 
+                  "Você precisa estar logado para acessar o dashboard administrativo." :
+                  "Você precisa de permissões de administrador para acessar esta página."
+                }
+              </p>
+              {!user && (
+                <p className="text-sm text-muted-foreground">
+                  Entre na sua conta para continuar.
+                </p>
+              )}
+              {user && !isAdmin && (
+                <p className="text-sm text-muted-foreground">
+                  Entre em contato com um administrador para obter acesso.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          
+          {/* Show Make Admin button if user is logged but not admin */}
+          {user && !isAdmin && <MakeAdminButton />}
+        </div>
       </div>
     );
   }
