@@ -34,12 +34,20 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (user && !loading) {
-      fetchDashboardData();
+    console.log('AdminDashboard useEffect - user:', user, 'loading:', loading);
+    if (!loading) {
+      if (user) {
+        console.log('User authenticated, fetching dashboard data');
+        fetchDashboardData();
+      } else {
+        console.log('No user authenticated');
+        setIsLoading(false);
+      }
     }
   }, [user, loading]);
 
   const fetchDashboardData = async () => {
+    console.log('Starting fetchDashboardData');
     try {
       setIsLoading(true);
 
@@ -84,6 +92,14 @@ const AdminDashboard = () => {
           .order('created_at', { ascending: false })
           .limit(10)
       ]);
+
+      console.log('Data fetched:', {
+        users: usersResult.data?.length,
+        transformations: transformationsResult.data?.length,
+        credits: creditsResult.data?.length,
+        purchases: creditPurchasesResult.data?.length,
+        styles: stylesResult.data?.length
+      });
 
       const today = new Date().toISOString().split('T')[0];
       
@@ -142,6 +158,7 @@ const AdminDashboard = () => {
         });
       }
 
+      console.log('Dashboard data prepared, setting state');
       setDashboardData({
         totalUsers: users.length,
         totalTransformations: transformations.length,
@@ -158,10 +175,13 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
+      console.log('Setting isLoading to false');
       setIsLoading(false);
     }
   };
 
+
+  console.log('AdminDashboard render - loading:', loading, 'isLoading:', isLoading, 'user:', !!user, 'dashboardData:', !!dashboardData);
 
   if (loading || isLoading) {
     return (
@@ -189,7 +209,7 @@ const AdminDashboard = () => {
     );
   }
 
-  if (!user) {
+  if (!user && !loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="p-8 text-center">
@@ -222,26 +242,75 @@ const AdminDashboard = () => {
         </div>
 
         {/* Metrics Cards */}
-        {dashboardData && (
+        {dashboardData ? (
           <MetricsCards data={dashboardData} />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-8 w-16" />
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
         )}
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {dashboardData && (
+          {dashboardData ? (
             <>
               <UsageCharts data={dashboardData.usageByDay} />
               <PopularStyles styles={dashboardData.popularStyles} />
+            </>
+          ) : (
+            <>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-48" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-64 w-full" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-32" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-64 w-full" />
+                </CardContent>
+              </Card>
             </>
           )}
         </div>
 
         {/* Tables Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {dashboardData && (
+          {dashboardData ? (
             <>
               <RecentTransformations transformations={dashboardData.recentTransformations} />
               <PaymentAnalytics paymentStats={dashboardData.paymentStats} />
+            </>
+          ) : (
+            <>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-40" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-48 w-full" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-32" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-48 w-full" />
+                </CardContent>
+              </Card>
             </>
           )}
         </div>
