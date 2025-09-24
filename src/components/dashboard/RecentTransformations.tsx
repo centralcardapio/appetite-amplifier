@@ -13,6 +13,7 @@ interface RecentTransformationsProps {
     created_at: string;
     transformed_images: any[];
     reprocessing_count: number;
+    user_email?: string;
   }>;
 }
 
@@ -70,8 +71,9 @@ export const RecentTransformations = ({ transformations }: RecentTransformations
               <TableHeader>
                 <TableRow>
                   <TableHead>Arquivo</TableHead>
+                  <TableHead>E-mail</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Imagens</TableHead>
+                  <TableHead>Processamentos</TableHead>
                   <TableHead>Criado</TableHead>
                 </TableRow>
               </TableHeader>
@@ -89,6 +91,9 @@ export const RecentTransformations = ({ transformations }: RecentTransformations
                           </span>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {transformation.user_email || 'N/A'}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">

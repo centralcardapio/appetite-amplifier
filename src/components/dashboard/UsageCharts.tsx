@@ -6,7 +6,8 @@ interface UsageChartsProps {
   data: Array<{
     date: string;
     transformations: number;
-    users: number;
+    newSignups: number;
+    reprocessingRate: number;
   }>;
 }
 
@@ -25,88 +26,81 @@ export const UsageCharts = ({ data }: UsageChartsProps) => {
       label: "Transformações",
       color: "hsl(var(--primary))",
     },
-    users: {
-      label: "Usuários",
-      color: "hsl(var(--accent))",
+    newSignups: {
+      label: "Novos Cadastros",
+      color: "hsl(142 76% 36%)",
+    },
+    reprocessingRate: {
+      label: "Reprocessamento (%)",
+      color: "hsl(0 84% 60%)",
     },
   };
 
   return (
-    <div className="space-y-6">
-      {/* Usage Trend */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Uso da Plataforma - Últimos 7 Dias</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={formattedData}>
-                <XAxis 
-                  dataKey="displayDate" 
-                  axisLine={false}
-                  tickLine={false}
-                  className="text-xs"
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  className="text-xs"
-                />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Area
-                  type="monotone"
-                  dataKey="transformations"
-                  stroke="hsl(var(--primary))"
-                  fill="hsl(var(--primary))"
-                  fillOpacity={0.2}
-                  strokeWidth={2}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="users"
-                  stroke="hsl(var(--accent))"
-                  fill="hsl(var(--accent))"
-                  fillOpacity={0.1}
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        </CardContent>
-      </Card>
-
-      {/* Daily Comparison */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Comparativo Diário</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer config={chartConfig} className="h-[250px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={formattedData}>
-                <XAxis 
-                  dataKey="displayDate" 
-                  axisLine={false}
-                  tickLine={false}
-                  className="text-xs"
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  className="text-xs"
-                />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar
-                  dataKey="transformations"
-                  fill="hsl(var(--primary))"
-                  radius={[2, 2, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-        </CardContent>
-      </Card>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Novos Cadastros e Transformações</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer config={chartConfig} className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={formattedData}>
+              <XAxis 
+                dataKey="displayDate" 
+                axisLine={false}
+                tickLine={false}
+                className="text-xs"
+              />
+              <YAxis 
+                axisLine={false}
+                tickLine={false}
+                className="text-xs"
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Area
+                type="monotone"
+                dataKey="transformations"
+                stroke="hsl(var(--primary))"
+                fill="hsl(var(--primary))"
+                fillOpacity={0.2}
+                strokeWidth={2}
+              />
+              <Area
+                type="monotone"
+                dataKey="newSignups"
+                stroke="hsl(142 76% 36%)"
+                fill="hsl(142 76% 36%)"
+                fillOpacity={0.1}
+                strokeWidth={2}
+              />
+              <Area
+                type="monotone"
+                dataKey="reprocessingRate"
+                stroke="hsl(0 84% 60%)"
+                fill="hsl(0 84% 60%)"
+                fillOpacity={0.1}
+                strokeWidth={2}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartContainer>
+        
+        {/* Legend */}
+        <div className="flex justify-center space-x-6 mt-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded-full bg-primary" />
+            <span className="text-xs text-muted-foreground">Transformações</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(142 76% 36%)' }} />
+            <span className="text-xs text-muted-foreground">Novos Cadastros</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(0 84% 60%)' }} />
+            <span className="text-xs text-muted-foreground">Reprocessamento (%)</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };

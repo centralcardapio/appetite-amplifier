@@ -6,20 +6,31 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Image, CreditCard, TrendingUp, Calendar, Star, Shield } from "lucide-react";
+import { DateRange } from "react-day-picker";
+import { subDays, format, startOfDay, endOfDay } from "date-fns";
 import { MetricsCards } from "@/components/dashboard/MetricsCards";
 import { UsageCharts } from "@/components/dashboard/UsageCharts";
+import { RevenueCharts } from "@/components/dashboard/RevenueCharts";
 import { PopularStyles } from "@/components/dashboard/PopularStyles";
+import { ConversionFunnel } from "@/components/dashboard/ConversionFunnel";
 import { RecentTransformations } from "@/components/dashboard/RecentTransformations";
-import { PaymentAnalytics } from "@/components/dashboard/PaymentAnalytics";
+import { UserPhotoViewer } from "@/components/dashboard/UserPhotoViewer";
+import { DateRangePicker } from "@/components/dashboard/DateRangePicker";
 import { MakeAdminButton } from "@/components/MakeAdminButton";
 
 interface DashboardData {
-  totalUsers: number;
+  newSignups: number;
   totalTransformations: number;
-  totalCreditsUsed: number;
+  plansContracted: number;
   totalRevenue: number;
-  newUsersToday: number;
-  transformationsToday: number;
+  reprocessingRate: number;
+  previousPeriod: {
+    newSignups: number;
+    totalTransformations: number;
+    plansContracted: number;
+    totalRevenue: number;
+    reprocessingRate: number;
+  };
   popularStyles: Array<{ style: string; count: number }>;
   recentTransformations: Array<any>;
   paymentStats: {
@@ -27,7 +38,24 @@ interface DashboardData {
     confirmed: number;
     totalValue: number;
   };
-  usageByDay: Array<{ date: string; transformations: number; users: number }>;
+  usageByDay: Array<{ 
+    date: string; 
+    transformations: number; 
+    newSignups: number; 
+    reprocessingRate: number; 
+  }>;
+  revenueByDay: Array<{
+    date: string;
+    plans: number;
+    revenue: number;
+  }>;
+  conversionFunnel: {
+    totalSignups: number;
+    emailConfirmed: number;
+    styleSelected: number;
+    tested: number;
+    purchasedCredits: number;
+  };
 }
 
 const AdminDashboard = () => {
@@ -35,6 +63,12 @@ const AdminDashboard = () => {
   const { isAdmin, loading: roleLoading } = useUserRole();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Default to last 7 days
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 7),
+    to: new Date()
+  });
 
   useEffect(() => {
     console.log('AdminDashboard useEffect - user:', user, 'loading:', loading, 'isAdmin:', isAdmin, 'roleLoading:', roleLoading);
@@ -47,12 +81,22 @@ const AdminDashboard = () => {
         setIsLoading(false);
       }
     }
-  }, [user, loading, isAdmin, roleLoading]);
+  }, [user, loading, isAdmin, roleLoading, dateRange]);
 
   const fetchDashboardData = async () => {
     console.log('Starting fetchDashboardData');
+    if (!dateRange?.from || !dateRange?.to) return;
+    
     try {
       setIsLoading(true);
+
+      const startDate = startOfDay(dateRange.from);
+      const endDate = endOfDay(dateRange.to);
+      const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Calculate comparison period
+      const comparisonEndDate = subDays(startDate, 1);
+      const comparisonStartDate = subDays(comparisonEndDate, daysDiff - 1);
 
       // Fetch all data in parallel
       const [
@@ -61,39 +105,72 @@ const AdminDashboard = () => {
         creditsResult,
         creditPurchasesResult,
         stylesResult,
-        recentResult
+        recentResult,
+        // Comparison period data
+        comparisonUsersResult,
+        comparisonTransformationsResult,
+        comparisonCreditPurchasesResult
       ] = await Promise.all([
-        // Total users from photo_credits table
+        // Current period - users (new signups)
         supabase
           .from('photo_credits')
-          .select('user_id, created_at'),
+          .select('user_id, created_at')
+          .gte('created_at', startDate.toISOString())
+          .lte('created_at', endDate.toISOString()),
         
-        // Total transformations and today's count
+        // Current period - transformations
         supabase
           .from('photo_transformations')
-          .select('id, created_at, status'),
+          .select('id, created_at, status, reprocessing_count, user_id')
+          .gte('created_at', startDate.toISOString())
+          .lte('created_at', endDate.toISOString()),
         
         // Credits usage
         supabase
           .from('credit_usage_history')
-          .select('amount_used'),
+          .select('amount_used, used_at')
+          .gte('used_at', startDate.toISOString())
+          .lte('used_at', endDate.toISOString()),
         
-        // Credit purchases data
+        // Credit purchases data (current period)
         supabase
           .from('credit_purchases')
-          .select('user_id, amount, purchase_type, created_at'),
+          .select('user_id, amount, purchase_type, created_at')
+          .gte('created_at', startDate.toISOString())
+          .lte('created_at', endDate.toISOString()),
         
         // Popular styles
         supabase
           .from('user_styles')
           .select('selected_style'),
         
-        // Recent transformations
+        // Recent transformations (last 10)
         supabase
           .from('photo_transformations')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(10)
+          .limit(10),
+
+        // Comparison period - users
+        supabase
+          .from('photo_credits')
+          .select('user_id, created_at')
+          .gte('created_at', comparisonStartDate.toISOString())
+          .lte('created_at', comparisonEndDate.toISOString()),
+
+        // Comparison period - transformations
+        supabase
+          .from('photo_transformations')
+          .select('id, created_at, status, reprocessing_count')
+          .gte('created_at', comparisonStartDate.toISOString())
+          .lte('created_at', comparisonEndDate.toISOString()),
+
+        // Comparison period - credit purchases
+        supabase
+          .from('credit_purchases')
+          .select('user_id, amount, purchase_type, created_at')
+          .gte('created_at', comparisonStartDate.toISOString())
+          .lte('created_at', comparisonEndDate.toISOString())
       ]);
 
       console.log('Data fetched:', {
@@ -104,32 +181,35 @@ const AdminDashboard = () => {
         styles: stylesResult.data?.length
       });
 
-      const today = new Date().toISOString().split('T')[0];
+      // Process current period data
+      const currentUsers = usersResult.data || [];
+      const currentTransformations = transformationsResult.data || [];
+      const currentCreditPurchases = creditPurchasesResult.data || [];
       
-      // Process users data
-      const users = usersResult.data || [];
-      const newUsersToday = users.filter(u => u.created_at.startsWith(today)).length;
-      
-      // Process transformations data
-      const transformations = transformationsResult.data || [];
-      const transformationsToday = transformations.filter(t => 
-        t.created_at.startsWith(today)
-      ).length;
+      // Process comparison period data
+      const comparisonUsers = comparisonUsersResult.data || [];
+      const comparisonTransformations = comparisonTransformationsResult.data || [];
+      const comparisonCreditPurchases = comparisonCreditPurchasesResult.data || [];
 
-      // Process credits data
-      const totalCreditsUsed = (creditsResult.data || [])
-        .reduce((sum, credit) => sum + credit.amount_used, 0);
-
-      // Process credit purchases for revenue
-      const creditPurchases = creditPurchasesResult.data || [];
-      const paidPurchases = creditPurchases.filter(p => p.purchase_type === 'paid');
+      // Calculate metrics
+      const newSignups = currentUsers.length;
+      const totalTransformations = currentTransformations.length;
+      const paidPurchases = currentCreditPurchases.filter(p => p.purchase_type === 'paid');
+      const plansContracted = paidPurchases.length;
       const totalRevenue = paidPurchases.length * 10; // Estimate R$10 per purchase
       
-      const paymentStats = {
-        pending: 0, // Not tracking payments table for now
-        confirmed: paidPurchases.length,
-        totalValue: totalRevenue * 100 // Convert to cents for consistency
-      };
+      // Calculate reprocessing rate
+      const reprocessedCount = currentTransformations.filter(t => t.reprocessing_count > 0).length;
+      const reprocessingRate = totalTransformations > 0 ? (reprocessedCount / totalTransformations) * 100 : 0;
+
+      // Calculate comparison metrics
+      const comparisonSignups = comparisonUsers.length;
+      const comparisonTransformationsCount = comparisonTransformations.length;
+      const comparisonPaidPurchases = comparisonCreditPurchases.filter(p => p.purchase_type === 'paid');
+      const comparisonPlansContracted = comparisonPaidPurchases.length;
+      const comparisonRevenue = comparisonPaidPurchases.length * 10;
+      const comparisonReprocessedCount = comparisonTransformations.filter(t => t.reprocessing_count > 0).length;
+      const comparisonReprocessingRate = comparisonTransformationsCount > 0 ? (comparisonReprocessedCount / comparisonTransformationsCount) * 100 : 0;
 
       // Process popular styles
       const styles = stylesResult.data || [];
@@ -143,36 +223,102 @@ const AdminDashboard = () => {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
 
-      // Generate usage by day (last 7 days)
+      // Generate usage by day
       const usageByDay = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
+      const revenueByDay = [];
+      
+      for (let i = 0; i < daysDiff; i++) {
+        const date = new Date(startDate);
+        date.setDate(date.getDate() + i);
         const dateStr = date.toISOString().split('T')[0];
         
-        const dayTransformations = transformations.filter(t => 
+        const dayTransformations = currentTransformations.filter(t => 
           t.created_at.startsWith(dateStr)
         ).length;
+
+        const daySignups = currentUsers.filter(u => 
+          u.created_at.startsWith(dateStr)
+        ).length;
+
+        const dayReprocessed = currentTransformations.filter(t => 
+          t.created_at.startsWith(dateStr) && t.reprocessing_count > 0
+        ).length;
+
+        const dayPlans = paidPurchases.filter(p => 
+          p.created_at.startsWith(dateStr)
+        ).length;
+
+        const dayRevenue = dayPlans * 10;
 
         usageByDay.push({
           date: dateStr,
           transformations: dayTransformations,
-          users: Math.floor(dayTransformations * 0.7) // Estimate unique users
+          newSignups: daySignups,
+          reprocessingRate: dayTransformations > 0 ? (dayReprocessed / dayTransformations) * 100 : 0
+        });
+
+        revenueByDay.push({
+          date: dateStr,
+          plans: dayPlans,
+          revenue: dayRevenue
         });
       }
 
+      // Get all users who signed up in the period for conversion funnel
+      const allSignupsInPeriod = currentUsers;
+      const signupUserIds = allSignupsInPeriod.map(u => u.user_id);
+
+      // Get conversion funnel data
+      const [stylesInPeriod, transformationsAllTime, purchasesAllTime] = await Promise.all([
+        supabase
+          .from('user_styles')
+          .select('user_id')
+          .in('user_id', signupUserIds),
+        supabase
+          .from('photo_transformations')
+          .select('user_id')
+          .in('user_id', signupUserIds),
+        supabase
+          .from('credit_purchases')
+          .select('user_id')
+          .in('user_id', signupUserIds)
+          .neq('purchase_type', 'free')
+      ]);
+
+      const conversionFunnel = {
+        totalSignups: signupUserIds.length,
+        emailConfirmed: signupUserIds.length, // Assume all are confirmed for now
+        styleSelected: [...new Set(stylesInPeriod.data?.map(s => s.user_id) || [])].length,
+        tested: [...new Set(transformationsAllTime.data?.map(t => t.user_id) || [])].length,
+        purchasedCredits: [...new Set(purchasesAllTime.data?.map(p => p.user_id) || [])].length
+      };
+
+      const paymentStats = {
+        pending: 0,
+        confirmed: paidPurchases.length,
+        totalValue: totalRevenue * 100 // Convert to cents
+      };
+
       console.log('Dashboard data prepared, setting state');
       setDashboardData({
-        totalUsers: users.length,
-        totalTransformations: transformations.length,
-        totalCreditsUsed,
-        totalRevenue: paymentStats.totalValue / 100, // Convert from cents
-        newUsersToday,
-        transformationsToday,
+        newSignups,
+        totalTransformations,
+        plansContracted,
+        totalRevenue,
+        reprocessingRate,
+        previousPeriod: {
+          newSignups: comparisonSignups,
+          totalTransformations: comparisonTransformationsCount,
+          plansContracted: comparisonPlansContracted,
+          totalRevenue: comparisonRevenue,
+          reprocessingRate: comparisonReprocessingRate
+        },
         popularStyles,
         recentTransformations: recentResult.data || [],
         paymentStats,
-        usageByDay
+        usageByDay,
+        revenueByDay,
+        conversionFunnel
       });
 
     } catch (error) {
@@ -182,7 +328,6 @@ const AdminDashboard = () => {
       setIsLoading(false);
     }
   };
-
 
   console.log('AdminDashboard render - loading:', loading, 'roleLoading:', roleLoading, 'isLoading:', isLoading, 'user:', !!user, 'isAdmin:', isAdmin, 'dashboardData:', !!dashboardData);
 
@@ -197,8 +342,8 @@ const AdminDashboard = () => {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {[1, 2, 3, 4, 5].map((i) => (
               <Card key={i}>
                 <CardHeader>
                   <Skeleton className="h-4 w-24" />
@@ -257,18 +402,18 @@ const AdminDashboard = () => {
               Acompanhe as métricas e performance da plataforma
             </p>
           </div>
-          <Badge variant="secondary" className="px-3 py-1">
-            <Calendar className="w-4 h-4 mr-2" />
-            {new Date().toLocaleDateString('pt-BR')}
-          </Badge>
+          <DateRangePicker 
+            dateRange={dateRange} 
+            onDateRangeChange={setDateRange} 
+          />
         </div>
 
         {/* Metrics Cards */}
         {dashboardData ? (
           <MetricsCards data={dashboardData} />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {[1, 2, 3, 4, 5].map((i) => (
               <Card key={i}>
                 <CardHeader>
                   <Skeleton className="h-4 w-24" />
@@ -284,7 +429,7 @@ const AdminDashboard = () => {
           {dashboardData ? (
             <>
               <UsageCharts data={dashboardData.usageByDay} />
-              <PopularStyles styles={dashboardData.popularStyles} />
+              <RevenueCharts data={dashboardData.revenueByDay} />
             </>
           ) : (
             <>
@@ -308,12 +453,26 @@ const AdminDashboard = () => {
           )}
         </div>
 
-        {/* Tables Section */}
+        {/* Popular Styles */}
+        {dashboardData ? (
+          <PopularStyles styles={dashboardData.popularStyles} />
+        ) : (
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-64 w-full" />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Conversion Funnel and User Photo Viewer */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {dashboardData ? (
             <>
-              <RecentTransformations transformations={dashboardData.recentTransformations} />
-              <PaymentAnalytics paymentStats={dashboardData.paymentStats} />
+              <ConversionFunnel data={dashboardData.conversionFunnel} />
+              <UserPhotoViewer />
             </>
           ) : (
             <>
@@ -336,6 +495,20 @@ const AdminDashboard = () => {
             </>
           )}
         </div>
+
+        {/* Recent Transformations */}
+        {dashboardData ? (
+          <RecentTransformations transformations={dashboardData.recentTransformations} />
+        ) : (
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-40" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-48 w-full" />
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
