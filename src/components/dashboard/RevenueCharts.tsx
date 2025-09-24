@@ -27,7 +27,7 @@ export const RevenueCharts = ({ data }: RevenueChartsProps) => {
     },
     revenue: {
       label: "Receita Total",
-      color: "hsl(var(--accent))",
+      color: "hsl(217, 91%, 60%)", // Blue color
     },
   };
 
@@ -36,10 +36,10 @@ export const RevenueCharts = ({ data }: RevenueChartsProps) => {
       <CardHeader>
         <CardTitle className="text-lg">Faturamento</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <ChartContainer config={chartConfig} className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={formattedData}>
+            <AreaChart data={formattedData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
               <XAxis 
                 dataKey="displayDate" 
                 axisLine={false}
@@ -64,8 +64,8 @@ export const RevenueCharts = ({ data }: RevenueChartsProps) => {
               <Area
                 type="monotone"
                 dataKey="revenue"
-                stroke="hsl(var(--accent))"
-                fill="hsl(var(--accent))"
+                stroke="hsl(217, 91%, 60%)"
+                fill="hsl(217, 91%, 60%)"
                 fillOpacity={0.1}
                 strokeWidth={2}
               />

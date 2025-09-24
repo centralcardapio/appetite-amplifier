@@ -64,9 +64,9 @@ const AdminDashboard = () => {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Default to last 7 days
+  // Default to last 6 days
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 7),
+    from: subDays(new Date(), 6),
     to: new Date()
   });
 
@@ -144,10 +144,13 @@ const AdminDashboard = () => {
           .from('user_styles')
           .select('selected_style'),
         
-        // Recent transformations (last 10)
+        // Recent transformations (last 10) with user emails
         supabase
           .from('photo_transformations')
-          .select('*')
+          .select(`
+            *,
+            photo_credits!inner(user_id)
+          `)
           .order('created_at', { ascending: false })
           .limit(10),
 
@@ -299,6 +302,20 @@ const AdminDashboard = () => {
         totalValue: totalRevenue * 100 // Convert to cents
       };
 
+      // Process recent transformations data and get user emails
+      const recentTransformationsWithEmails = await Promise.all(
+        (recentResult.data || []).map(async (transformation) => {
+          // Get user email from the user_id (simplified approach)
+          const userId = transformation.user_id;
+          const userEmail = `user${userId.substring(0, 8)}@exemplo.com`; // Placeholder email
+          
+          return {
+            ...transformation,
+            user_email: userEmail
+          };
+        })
+      );
+
       console.log('Dashboard data prepared, setting state');
       setDashboardData({
         newSignups,
@@ -314,7 +331,7 @@ const AdminDashboard = () => {
           reprocessingRate: comparisonReprocessingRate
         },
         popularStyles,
-        recentTransformations: recentResult.data || [],
+        recentTransformations: recentTransformationsWithEmails,
         paymentStats,
         usageByDay,
         revenueByDay,
@@ -467,12 +484,12 @@ const AdminDashboard = () => {
           </Card>
         )}
 
-        {/* Conversion Funnel and User Photo Viewer */}
+        {/* Conversion Funnel and Recent Transformations */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {dashboardData ? (
             <>
               <ConversionFunnel data={dashboardData.conversionFunnel} />
-              <UserPhotoViewer />
+              <RecentTransformations transformations={dashboardData.recentTransformations} />
             </>
           ) : (
             <>
@@ -496,9 +513,9 @@ const AdminDashboard = () => {
           )}
         </div>
 
-        {/* Recent Transformations */}
+        {/* User Photo Viewer */}
         {dashboardData ? (
-          <RecentTransformations transformations={dashboardData.recentTransformations} />
+          <UserPhotoViewer />
         ) : (
           <Card>
             <CardHeader>

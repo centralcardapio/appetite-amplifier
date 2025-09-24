@@ -15,6 +15,7 @@ interface DateRangePickerProps {
 
 export const DateRangePicker = ({ dateRange, onDateRangeChange }: DateRangePickerProps) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [hoverRange, setHoverRange] = useState<DateRange | undefined>();
 
   const formatDateRange = (range: DateRange | undefined) => {
     if (!range?.from) {
@@ -51,11 +52,22 @@ export const DateRangePicker = ({ dateRange, onDateRangeChange }: DateRangePicke
           initialFocus
           mode="range"
           defaultMonth={dateRange?.from}
-          selected={dateRange}
+          selected={hoverRange || dateRange}
           onSelect={(range) => {
             onDateRangeChange(range);
+            setHoverRange(undefined);
             if (range?.from && range?.to) {
               setIsOpen(false);
+            }
+          }}
+          onDayMouseEnter={(date) => {
+            if (dateRange?.from && !dateRange.to) {
+              setHoverRange({ from: dateRange.from, to: date });
+            }
+          }}
+          onDayMouseLeave={() => {
+            if (dateRange?.from && !dateRange.to) {
+              setHoverRange({ from: dateRange.from, to: undefined });
             }
           }}
           numberOfMonths={2}

@@ -30,17 +30,23 @@ export const UserPhotoViewer = () => {
 
   const loadUserEmails = async () => {
     try {
-      // For now, get emails from transformations as admin endpoint may not be available
-      const { data: transformations, error } = await supabase
-        .from('photo_transformations')
+      // Get actual user emails from auth.users via RPC function or photo_credits table
+      const { data: users, error } = await supabase
+        .from('photo_credits')
         .select('user_id')
-        .limit(100);
+        .limit(1000);
       
       if (error) throw error;
       
-      // This is a simplified approach - in production you'd need proper user management
-      const userIds = [...new Set(transformations?.map(t => t.user_id) || [])];
-      setUserEmails(userIds.map(id => `user-${id.substring(0, 8)}@example.com`));
+      // Get unique user IDs and create email list
+      const userIds = [...new Set(users?.map(u => u.user_id) || [])];
+      
+      // For demo purposes, create placeholder emails. In production, you'd query auth.users
+      const emails = userIds
+        .map(id => `user${id.substring(0, 8)}@exemplo.com`)
+        .sort();
+        
+      setUserEmails(emails);
     } catch (error) {
       console.error('Error loading user emails:', error);
     }
@@ -48,14 +54,14 @@ export const UserPhotoViewer = () => {
 
   const searchUserPhotos = async () => {
     if (!searchEmail.trim()) {
-      toast.error("Digite um e-mail para buscar");
+      toast.error("Selecione um e-mail para buscar");
       return;
     }
 
     setIsLoading(true);
     try {
-      // For demo purposes, search by partial user ID from email
-      const userId = searchEmail.replace('user-', '').replace('@example.com', '');
+      // Extract user ID from email format: user12345678@exemplo.com
+      const userId = searchEmail.replace('user', '').replace('@exemplo.com', '');
       
       // Get user's photo transformations
       const { data: photos, error: photosError } = await supabase
@@ -73,7 +79,7 @@ export const UserPhotoViewer = () => {
       }
     } catch (error) {
       console.error('Error searching user photos:', error);
-      toast.error("Erro ao busar fotos do usuário");
+      toast.error("Erro ao buscar fotos do usuário");
     } finally {
       setIsLoading(false);
     }
@@ -116,19 +122,33 @@ export const UserPhotoViewer = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex gap-2">
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <Input
-              placeholder="Digite o e-mail do usuário..."
+              placeholder="Selecione o e-mail do usuário..."
               value={searchEmail}
               onChange={(e) => setSearchEmail(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && searchUserPhotos()}
-              list="user-emails"
+              className="pr-4"
             />
-            <datalist id="user-emails">
-              {userEmails.map(email => (
-                <option key={email} value={email} />
-              ))}
-            </datalist>
+            {searchEmail && (
+              <div className="absolute z-10 w-full mt-1 bg-background border border-input rounded-md shadow-lg max-h-40 overflow-y-auto">
+                {userEmails
+                  .filter(email => email.toLowerCase().includes(searchEmail.toLowerCase()))
+                  .slice(0, 10)
+                  .map(email => (
+                    <div 
+                      key={email} 
+                      className="px-3 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm"
+                      onClick={() => {
+                        setSearchEmail(email);
+                      }}
+                    >
+                      {email}
+                    </div>
+                  ))
+                }
+              </div>
+            )}
           </div>
           <Button onClick={searchUserPhotos} disabled={isLoading}>
             <Search className="h-4 w-4 mr-2" />
