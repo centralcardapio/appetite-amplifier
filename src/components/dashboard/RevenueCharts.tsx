@@ -39,7 +39,7 @@ export const RevenueCharts = ({ data }: RevenueChartsProps) => {
       <CardContent className="pt-6">
         <ChartContainer config={chartConfig} className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={formattedData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+            <AreaChart data={formattedData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
               <XAxis 
                 dataKey="displayDate" 
                 axisLine={false}
@@ -52,7 +52,10 @@ export const RevenueCharts = ({ data }: RevenueChartsProps) => {
                 className="text-xs"
               />
               <ChartTooltip content={<ChartTooltipContent />} />
-              <ChartLegend content={<ChartLegendContent />} />
+              <ChartLegend 
+                content={<ChartLegendContent />} 
+                wrapperStyle={{ paddingTop: '20px' }}
+              />
               <Area
                 type="monotone"
                 dataKey="plans"

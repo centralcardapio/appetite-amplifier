@@ -30,20 +30,12 @@ export const UserPhotoViewer = () => {
 
   const loadUserEmails = async () => {
     try {
-      // Get actual user emails from auth.users via RPC function or photo_credits table
-      const { data: users, error } = await supabase
-        .from('photo_credits')
-        .select('user_id')
-        .limit(1000);
-      
+      const { data, error } = await supabase.auth.admin.listUsers();
       if (error) throw error;
       
-      // Get unique user IDs and create email list
-      const userIds = [...new Set(users?.map(u => u.user_id) || [])];
-      
-      // For demo purposes, create placeholder emails. In production, you'd query auth.users
-      const emails = userIds
-        .map(id => `user${id.substring(0, 8)}@exemplo.com`)
+      const emails = data.users
+        .map((user: any) => user.email)
+        .filter((email: string) => email)
         .sort();
         
       setUserEmails(emails);
@@ -60,14 +52,22 @@ export const UserPhotoViewer = () => {
 
     setIsLoading(true);
     try {
-      // Extract user ID from email format: user12345678@exemplo.com
-      const userId = searchEmail.replace('user', '').replace('@exemplo.com', '');
+      // Find user ID by email
+      const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+      if (authError) throw authError;
+      
+      const user = authData.users.find((u: any) => u.email === searchEmail);
+      if (!user) {
+        toast.error("Usuário não encontrado");
+        setIsLoading(false);
+        return;
+      }
       
       // Get user's photo transformations
       const { data: photos, error: photosError } = await supabase
         .from('photo_transformations')
         .select('*')
-        .ilike('user_id', `%${userId}%`)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (photosError) throw photosError;
@@ -123,32 +123,16 @@ export const UserPhotoViewer = () => {
       <CardContent className="space-y-4">
         <div className="flex gap-2">
           <div className="flex-1 relative">
-            <Input
-              placeholder="Selecione o e-mail do usuário..."
+            <select
               value={searchEmail}
               onChange={(e) => setSearchEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && searchUserPhotos()}
-              className="pr-4"
-            />
-            {searchEmail && (
-              <div className="absolute z-10 w-full mt-1 bg-background border border-input rounded-md shadow-lg max-h-40 overflow-y-auto">
-                {userEmails
-                  .filter(email => email.toLowerCase().includes(searchEmail.toLowerCase()))
-                  .slice(0, 10)
-                  .map(email => (
-                    <div 
-                      key={email} 
-                      className="px-3 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm"
-                      onClick={() => {
-                        setSearchEmail(email);
-                      }}
-                    >
-                      {email}
-                    </div>
-                  ))
-                }
-              </div>
-            )}
+              className="w-full h-10 px-3 py-2 text-sm bg-transparent border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+            >
+              <option value="">Selecione um usuário...</option>
+              {userEmails.map(email => (
+                <option key={email} value={email}>{email}</option>
+              ))}
+            </select>
           </div>
           <Button onClick={searchUserPhotos} disabled={isLoading}>
             <Search className="h-4 w-4 mr-2" />

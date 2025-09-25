@@ -16,6 +16,7 @@ import { ConversionFunnel } from "@/components/dashboard/ConversionFunnel";
 import { RecentTransformations } from "@/components/dashboard/RecentTransformations";
 import { UserPhotoViewer } from "@/components/dashboard/UserPhotoViewer";
 import { DateRangePicker } from "@/components/dashboard/DateRangePicker";
+import { PopularPlans } from "@/components/dashboard/PopularPlans";
 import { MakeAdminButton } from "@/components/MakeAdminButton";
 
 interface DashboardData {
@@ -32,6 +33,7 @@ interface DashboardData {
     reprocessingRate: number;
   };
   popularStyles: Array<{ style: string; count: number }>;
+  popularPlans: Array<{ plan: string; count: number }>;
   recentTransformations: Array<any>;
   paymentStats: {
     pending: number;
@@ -64,11 +66,9 @@ const AdminDashboard = () => {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Default to last 6 days
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 6),
-    to: new Date()
-  });
+  // Default to last 7 days
+  const [startDate, setStartDate] = useState<Date>(subDays(new Date(), 7));
+  const [endDate, setEndDate] = useState<Date>(new Date());
 
   useEffect(() => {
     console.log('AdminDashboard useEffect - user:', user, 'loading:', loading, 'isAdmin:', isAdmin, 'roleLoading:', roleLoading);
@@ -81,142 +81,133 @@ const AdminDashboard = () => {
         setIsLoading(false);
       }
     }
-  }, [user, loading, isAdmin, roleLoading, dateRange]);
+  }, [user, loading, isAdmin, roleLoading, startDate, endDate]);
 
   const fetchDashboardData = async () => {
     console.log('Starting fetchDashboardData');
-    if (!dateRange?.from || !dateRange?.to) return;
+    if (!startDate || !endDate) return;
     
     try {
       setIsLoading(true);
 
-      const startDate = startOfDay(dateRange.from);
-      const endDate = endOfDay(dateRange.to);
-      const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      const startDateFormatted = startOfDay(startDate);
+      const endDateFormatted = endOfDay(endDate);
+      const daysDiff = Math.ceil((endDateFormatted.getTime() - startDateFormatted.getTime()) / (1000 * 60 * 60 * 24));
       
       // Calculate comparison period
-      const comparisonEndDate = subDays(startDate, 1);
+      const comparisonEndDate = subDays(startDateFormatted, 1);
       const comparisonStartDate = subDays(comparisonEndDate, daysDiff - 1);
 
       // Fetch all data in parallel
       const [
-        usersResult,
-        transformationsResult,
-        creditsResult,
-        creditPurchasesResult,
+        authUsersResult,
+        creditUsageResult,
+        paymentsResult,
         stylesResult,
         recentResult,
         // Comparison period data
-        comparisonUsersResult,
-        comparisonTransformationsResult,
-        comparisonCreditPurchasesResult
+        comparisonAuthUsersResult,
+        comparisonCreditUsageResult,
+        comparisonPaymentsResult
       ] = await Promise.all([
-        // Current period - users (new signups)
-        supabase
-          .from('photo_credits')
-          .select('user_id, created_at')
-          .gte('created_at', startDate.toISOString())
-          .lte('created_at', endDate.toISOString()),
+        // Current period - auth users (new signups)
+        supabase.auth.admin.listUsers(),
         
-        // Current period - transformations
-        supabase
-          .from('photo_transformations')
-          .select('id, created_at, status, reprocessing_count, user_id')
-          .gte('created_at', startDate.toISOString())
-          .lte('created_at', endDate.toISOString()),
-        
-        // Credits usage
+        // Current period - credit usage (transformations)
         supabase
           .from('credit_usage_history')
           .select('amount_used, used_at')
-          .gte('used_at', startDate.toISOString())
-          .lte('used_at', endDate.toISOString()),
+          .gte('used_at', startDateFormatted.toISOString())
+          .lte('used_at', endDateFormatted.toISOString()),
         
-        // Credit purchases data (current period)
+        // Current period - payments
         supabase
-          .from('credit_purchases')
-          .select('user_id, amount, purchase_type, created_at')
-          .gte('created_at', startDate.toISOString())
-          .lte('created_at', endDate.toISOString()),
+          .from('payments')
+          .select('id, value, created_at, status, plan_name')
+          .eq('status', 'CONFIRMED')
+          .gte('created_at', startDateFormatted.toISOString())
+          .lte('created_at', endDateFormatted.toISOString()),
         
-        // Popular styles
+        // Popular styles from users created in period
         supabase
           .from('user_styles')
-          .select('selected_style'),
+          .select('selected_style, user_id'),
         
-        // Recent transformations (last 10) with user emails
+        // Recent transformations (last 10)
         supabase
           .from('photo_transformations')
-          .select(`
-            *,
-            photo_credits!inner(user_id)
-          `)
+          .select('*')
           .order('created_at', { ascending: false })
           .limit(10),
 
-        // Comparison period - users
-        supabase
-          .from('photo_credits')
-          .select('user_id, created_at')
-          .gte('created_at', comparisonStartDate.toISOString())
-          .lte('created_at', comparisonEndDate.toISOString()),
+        // Comparison period - auth users
+        supabase.auth.admin.listUsers(),
 
-        // Comparison period - transformations
+        // Comparison period - credit usage
         supabase
-          .from('photo_transformations')
-          .select('id, created_at, status, reprocessing_count')
-          .gte('created_at', comparisonStartDate.toISOString())
-          .lte('created_at', comparisonEndDate.toISOString()),
+          .from('credit_usage_history')
+          .select('amount_used, used_at')
+          .gte('used_at', comparisonStartDate.toISOString())
+          .lte('used_at', comparisonEndDate.toISOString()),
 
-        // Comparison period - credit purchases
+        // Comparison period - payments
         supabase
-          .from('credit_purchases')
-          .select('user_id, amount, purchase_type, created_at')
+          .from('payments')
+          .select('id, value, created_at, status')
+          .eq('status', 'CONFIRMED')
           .gte('created_at', comparisonStartDate.toISOString())
           .lte('created_at', comparisonEndDate.toISOString())
       ]);
 
       console.log('Data fetched:', {
-        users: usersResult.data?.length,
-        transformations: transformationsResult.data?.length,
-        credits: creditsResult.data?.length,
-        purchases: creditPurchasesResult.data?.length,
+        authUsers: authUsersResult.data?.users?.length,
+        creditUsage: creditUsageResult.data?.length,
+        payments: paymentsResult.data?.length,
         styles: stylesResult.data?.length
       });
 
+      // Filter auth users by creation date for current period
+      const currentUsers = (authUsersResult.data?.users || []).filter(user => {
+        const createdAt = new Date(user.created_at);
+        return createdAt >= startDateFormatted && createdAt <= endDateFormatted;
+      });
+
+      // Filter auth users by creation date for comparison period
+      const comparisonUsers = (comparisonAuthUsersResult.data?.users || []).filter(user => {
+        const createdAt = new Date(user.created_at);
+        return createdAt >= comparisonStartDate && createdAt <= comparisonEndDate;
+      });
+
       // Process current period data
-      const currentUsers = usersResult.data || [];
-      const currentTransformations = transformationsResult.data || [];
-      const currentCreditPurchases = creditPurchasesResult.data || [];
+      const currentCreditUsage = creditUsageResult.data || [];
+      const currentPayments = paymentsResult.data || [];
       
       // Process comparison period data
-      const comparisonUsers = comparisonUsersResult.data || [];
-      const comparisonTransformations = comparisonTransformationsResult.data || [];
-      const comparisonCreditPurchases = comparisonCreditPurchasesResult.data || [];
+      const comparisonCreditUsage = comparisonCreditUsageResult.data || [];
+      const comparisonPayments = comparisonPaymentsResult.data || [];
 
       // Calculate metrics
       const newSignups = currentUsers.length;
-      const totalTransformations = currentTransformations.length;
-      const paidPurchases = currentCreditPurchases.filter(p => p.purchase_type === 'paid');
-      const plansContracted = paidPurchases.length;
-      const totalRevenue = paidPurchases.length * 10; // Estimate R$10 per purchase
+      const totalTransformations = currentCreditUsage.reduce((sum, record) => sum + record.amount_used, 0);
+      const plansContracted = currentPayments.length;
+      const totalRevenue = currentPayments.reduce((sum, payment) => sum + payment.value, 0) / 100; // Convert from cents
       
-      // Calculate reprocessing rate
-      const reprocessedCount = currentTransformations.filter(t => t.reprocessing_count > 0).length;
-      const reprocessingRate = totalTransformations > 0 ? (reprocessedCount / totalTransformations) * 100 : 0;
+      // Calculate reprocessing rate (simplified - need to get actual reprocessing data)
+      const reprocessingRate = 0; // TODO: Calculate based on actual reprocessing data
 
       // Calculate comparison metrics
       const comparisonSignups = comparisonUsers.length;
-      const comparisonTransformationsCount = comparisonTransformations.length;
-      const comparisonPaidPurchases = comparisonCreditPurchases.filter(p => p.purchase_type === 'paid');
-      const comparisonPlansContracted = comparisonPaidPurchases.length;
-      const comparisonRevenue = comparisonPaidPurchases.length * 10;
-      const comparisonReprocessedCount = comparisonTransformations.filter(t => t.reprocessing_count > 0).length;
-      const comparisonReprocessingRate = comparisonTransformationsCount > 0 ? (comparisonReprocessedCount / comparisonTransformationsCount) * 100 : 0;
+      const comparisonTransformationsCount = comparisonCreditUsage.reduce((sum, record) => sum + record.amount_used, 0);
+      const comparisonPlansContracted = comparisonPayments.length;
+      const comparisonRevenue = comparisonPayments.reduce((sum, payment) => sum + payment.value, 0) / 100;
+      const comparisonReprocessingRate = 0;
 
-      // Process popular styles
+      // Process popular styles from users created in period
       const styles = stylesResult.data || [];
-      const styleCount = styles.reduce((acc, style) => {
+      const currentUserIds = currentUsers.map(u => u.id);
+      const stylesFromPeriod = styles.filter(style => currentUserIds.includes(style.user_id));
+      
+      const styleCount = stylesFromPeriod.reduce((acc, style) => {
         acc[style.selected_style] = (acc[style.selected_style] || 0) + 1;
         return acc;
       }, {} as Record<string, number>);
@@ -226,38 +217,48 @@ const AdminDashboard = () => {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
 
+      // Process popular plans
+      const planCount = currentPayments.reduce((acc, payment) => {
+        const planName = payment.plan_name || 'Plano Básico';
+        acc[planName] = (acc[planName] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      const popularPlans = Object.entries(planCount)
+        .map(([plan, count]) => ({ plan, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
       // Generate usage by day
       const usageByDay = [];
       const revenueByDay = [];
       
       for (let i = 0; i < daysDiff; i++) {
-        const date = new Date(startDate);
+        const date = new Date(startDateFormatted);
         date.setDate(date.getDate() + i);
         const dateStr = date.toISOString().split('T')[0];
         
-        const dayTransformations = currentTransformations.filter(t => 
-          t.created_at.startsWith(dateStr)
-        ).length;
+        const dayTransformations = currentCreditUsage.filter(record => 
+          record.used_at.startsWith(dateStr)
+        ).reduce((sum, record) => sum + record.amount_used, 0);
 
-        const daySignups = currentUsers.filter(u => 
+        const daySignups = currentUsers.filter((u: any) => 
           u.created_at.startsWith(dateStr)
         ).length;
 
-        const dayReprocessed = currentTransformations.filter(t => 
-          t.created_at.startsWith(dateStr) && t.reprocessing_count > 0
-        ).length;
-
-        const dayPlans = paidPurchases.filter(p => 
+        const dayPlans = currentPayments.filter(p => 
           p.created_at.startsWith(dateStr)
         ).length;
 
-        const dayRevenue = dayPlans * 10;
+        const dayRevenue = currentPayments.filter(p => 
+          p.created_at.startsWith(dateStr)
+        ).reduce((sum, payment) => sum + payment.value, 0) / 100;
 
         usageByDay.push({
           date: dateStr,
           transformations: dayTransformations,
           newSignups: daySignups,
-          reprocessingRate: dayTransformations > 0 ? (dayReprocessed / dayTransformations) * 100 : 0
+          reprocessingRate: 0 // TODO: Calculate actual reprocessing rate
         });
 
         revenueByDay.push({
@@ -267,11 +268,9 @@ const AdminDashboard = () => {
         });
       }
 
-      // Get all users who signed up in the period for conversion funnel
-      const allSignupsInPeriod = currentUsers;
-      const signupUserIds = allSignupsInPeriod.map(u => u.user_id);
-
       // Get conversion funnel data
+      const signupUserIds = currentUsers.map((u: any) => u.id);
+
       const [stylesInPeriod, transformationsAllTime, purchasesAllTime] = await Promise.all([
         supabase
           .from('user_styles')
@@ -282,15 +281,17 @@ const AdminDashboard = () => {
           .select('user_id')
           .in('user_id', signupUserIds),
         supabase
-          .from('credit_purchases')
+          .from('payments')
           .select('user_id')
           .in('user_id', signupUserIds)
-          .neq('purchase_type', 'free')
+          .eq('status', 'CONFIRMED')
       ]);
+
+      const usersWithLastSignIn = currentUsers.filter((u: any) => u.last_sign_in_at).length;
 
       const conversionFunnel = {
         totalSignups: signupUserIds.length,
-        emailConfirmed: signupUserIds.length, // Assume all are confirmed for now
+        emailConfirmed: usersWithLastSignIn,
         styleSelected: [...new Set(stylesInPeriod.data?.map(s => s.user_id) || [])].length,
         tested: [...new Set(transformationsAllTime.data?.map(t => t.user_id) || [])].length,
         purchasedCredits: [...new Set(purchasesAllTime.data?.map(p => p.user_id) || [])].length
@@ -298,16 +299,16 @@ const AdminDashboard = () => {
 
       const paymentStats = {
         pending: 0,
-        confirmed: paidPurchases.length,
+        confirmed: plansContracted,
         totalValue: totalRevenue * 100 // Convert to cents
       };
 
       // Process recent transformations data and get user emails
       const recentTransformationsWithEmails = await Promise.all(
         (recentResult.data || []).map(async (transformation) => {
-          // Get user email from the user_id (simplified approach)
-          const userId = transformation.user_id;
-          const userEmail = `user${userId.substring(0, 8)}@exemplo.com`; // Placeholder email
+          // Get user email from auth users
+          const authUser = authUsersResult.data?.users?.find((u: any) => u.id === transformation.user_id);
+          const userEmail = authUser?.email || 'N/A';
           
           return {
             ...transformation,
@@ -331,6 +332,7 @@ const AdminDashboard = () => {
           reprocessingRate: comparisonReprocessingRate
         },
         popularStyles,
+        popularPlans,
         recentTransformations: recentTransformationsWithEmails,
         paymentStats,
         usageByDay,
@@ -419,10 +421,24 @@ const AdminDashboard = () => {
               Acompanhe as métricas e performance da plataforma
             </p>
           </div>
-          <DateRangePicker 
-            dateRange={dateRange} 
-            onDateRangeChange={setDateRange} 
-          />
+          <div className="flex gap-4 items-center">
+            <div className="flex flex-col">
+              <label className="text-sm text-muted-foreground mb-1">Data Inicial</label>
+              <DateRangePicker 
+                selectedDate={startDate}
+                onDateChange={setStartDate}
+                placeholder="Data inicial"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-sm text-muted-foreground mb-1">Data Final</label>
+              <DateRangePicker 
+                selectedDate={endDate}
+                onDateChange={setEndDate}
+                placeholder="Data final"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Metrics Cards */}
@@ -470,26 +486,41 @@ const AdminDashboard = () => {
           )}
         </div>
 
-        {/* Popular Styles */}
-        {dashboardData ? (
-          <PopularStyles styles={dashboardData.popularStyles} />
-        ) : (
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-32" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-64 w-full" />
-            </CardContent>
-          </Card>
-        )}
+        {/* Popular Styles and Plans */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {dashboardData ? (
+            <>
+              <PopularStyles styles={dashboardData.popularStyles} />
+              <PopularPlans plans={dashboardData.popularPlans} />
+            </>
+          ) : (
+            <>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-32" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-64 w-full" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <Skeleton className="h-6 w-32" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-64 w-full" />
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
 
-        {/* Conversion Funnel and Recent Transformations */}
+        {/* Conversion Funnel and User Photo Viewer */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {dashboardData ? (
             <>
               <ConversionFunnel data={dashboardData.conversionFunnel} />
-              <RecentTransformations transformations={dashboardData.recentTransformations} />
+              <UserPhotoViewer />
             </>
           ) : (
             <>
@@ -503,7 +534,7 @@ const AdminDashboard = () => {
               </Card>
               <Card>
                 <CardHeader>
-                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-6 w-40" />
                 </CardHeader>
                 <CardContent>
                   <Skeleton className="h-48 w-full" />
@@ -513,13 +544,13 @@ const AdminDashboard = () => {
           )}
         </div>
 
-        {/* User Photo Viewer */}
+        {/* Recent Transformations */}
         {dashboardData ? (
-          <UserPhotoViewer />
+          <RecentTransformations transformations={dashboardData.recentTransformations} />
         ) : (
           <Card>
             <CardHeader>
-              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-6 w-32" />
             </CardHeader>
             <CardContent>
               <Skeleton className="h-48 w-full" />
