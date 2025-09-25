@@ -546,12 +546,12 @@ const AdminDashboard = () => {
           )}
         </div>
 
-        {/* Conversion Funnel and User Photo Viewer */}
+        {/* Conversion Funnel and Recent Transformations */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {dashboardData ? (
             <>
               <ConversionFunnel data={dashboardData.conversionFunnel} />
-              <UserPhotoViewer />
+              <RecentTransformations transformations={dashboardData.recentTransformations} />
             </>
           ) : (
             <>
@@ -575,9 +575,9 @@ const AdminDashboard = () => {
           )}
         </div>
 
-        {/* Recent Transformations */}
+        {/* User Photo Viewer */}
         {dashboardData ? (
-          <RecentTransformations transformations={dashboardData.recentTransformations} />
+          <UserPhotoViewer />
         ) : (
           <Card>
             <CardHeader>

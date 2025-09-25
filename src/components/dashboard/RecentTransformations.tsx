@@ -72,7 +72,6 @@ export const RecentTransformations = ({ transformations }: RecentTransformations
                 <TableRow>
                   <TableHead>Arquivo</TableHead>
                   <TableHead>E-mail</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Processamentos</TableHead>
                   <TableHead>Criado</TableHead>
                 </TableRow>
@@ -94,12 +93,6 @@ export const RecentTransformations = ({ transformations }: RecentTransformations
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {transformation.user_email || 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(transformation.status)}
-                        {getStatusBadge(transformation.status)}
-                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">
