@@ -105,10 +105,12 @@ const AdminDashboard = () => {
         paymentsResult,
         stylesResult,
         recentResult,
+        photoTransformationsResult,
         // Comparison period data
         comparisonAuthUsersResult,
         comparisonCreditUsageResult,
-        comparisonPaymentsResult
+        comparisonPaymentsResult,
+        comparisonPhotoTransformationsResult
       ] = await Promise.all([
         // Current period - auth users (new signups)
         supabase.auth.admin.listUsers(),
@@ -125,6 +127,7 @@ const AdminDashboard = () => {
           .from('payments')
           .select('id, value, created_at, status, plan_name')
           .eq('status', 'CONFIRMED')
+          .eq('billing_type', 'CREDIT_CARD')
           .gte('created_at', startDateFormatted.toISOString())
           .lte('created_at', endDateFormatted.toISOString()),
         
@@ -139,6 +142,13 @@ const AdminDashboard = () => {
           .select('*')
           .order('created_at', { ascending: false })
           .limit(10),
+
+        // Current period - photo transformations (for reprocessing rate)
+        supabase
+          .from('photo_transformations')
+          .select('id, reprocessing_count, created_at')
+          .gte('created_at', startDateFormatted.toISOString())
+          .lte('created_at', endDateFormatted.toISOString()),
 
         // Comparison period - auth users
         supabase.auth.admin.listUsers(),
@@ -155,6 +165,14 @@ const AdminDashboard = () => {
           .from('payments')
           .select('id, value, created_at, status')
           .eq('status', 'CONFIRMED')
+          .eq('billing_type', 'CREDIT_CARD')
+          .gte('created_at', comparisonStartDate.toISOString())
+          .lte('created_at', comparisonEndDate.toISOString()),
+
+        // Comparison period - photo transformations (for reprocessing rate)
+        supabase
+          .from('photo_transformations')
+          .select('id, reprocessing_count, created_at')
           .gte('created_at', comparisonStartDate.toISOString())
           .lte('created_at', comparisonEndDate.toISOString())
       ]);
@@ -181,26 +199,32 @@ const AdminDashboard = () => {
       // Process current period data
       const currentCreditUsage = creditUsageResult.data || [];
       const currentPayments = paymentsResult.data || [];
+      const currentPhotoTransformations = photoTransformationsResult.data || [];
       
       // Process comparison period data
       const comparisonCreditUsage = comparisonCreditUsageResult.data || [];
       const comparisonPayments = comparisonPaymentsResult.data || [];
+      const comparisonPhotoTransformations = comparisonPhotoTransformationsResult.data || [];
 
       // Calculate metrics
       const newSignups = currentUsers.length;
       const totalTransformations = currentCreditUsage.reduce((sum, record) => sum + record.amount_used, 0);
       const plansContracted = currentPayments.length;
-      const totalRevenue = currentPayments.reduce((sum, payment) => sum + payment.value, 0) / 100; // Convert from cents
+      const totalRevenue = currentPayments.reduce((sum, payment) => sum + payment.value, 0);
       
-      // Calculate reprocessing rate (simplified - need to get actual reprocessing data)
-      const reprocessingRate = 0; // TODO: Calculate based on actual reprocessing data
+      // Calculate reprocessing rate
+      const totalTransformationsForRate = currentPhotoTransformations.length;
+      const reprocessedTransformations = currentPhotoTransformations.filter(t => t.reprocessing_count > 0).length;
+      const reprocessingRate = totalTransformationsForRate > 0 ? (reprocessedTransformations / totalTransformationsForRate) * 100 : 0;
 
       // Calculate comparison metrics
       const comparisonSignups = comparisonUsers.length;
       const comparisonTransformationsCount = comparisonCreditUsage.reduce((sum, record) => sum + record.amount_used, 0);
       const comparisonPlansContracted = comparisonPayments.length;
-      const comparisonRevenue = comparisonPayments.reduce((sum, payment) => sum + payment.value, 0) / 100;
-      const comparisonReprocessingRate = 0;
+      const comparisonRevenue = comparisonPayments.reduce((sum, payment) => sum + payment.value, 0);
+      const comparisonTotalTransformations = comparisonPhotoTransformations.length;
+      const comparisonReprocessed = comparisonPhotoTransformations.filter(t => t.reprocessing_count > 0).length;
+      const comparisonReprocessingRate = comparisonTotalTransformations > 0 ? (comparisonReprocessed / comparisonTotalTransformations) * 100 : 0;
 
       // Process popular styles from users created in period
       const styles = stylesResult.data || [];
@@ -252,13 +276,19 @@ const AdminDashboard = () => {
 
         const dayRevenue = currentPayments.filter(p => 
           p.created_at.startsWith(dateStr)
-        ).reduce((sum, payment) => sum + payment.value, 0) / 100;
+        ).reduce((sum, payment) => sum + payment.value, 0);
+
+        const dayTransformationsForRate = currentPhotoTransformations.filter(t => 
+          t.created_at.startsWith(dateStr)
+        );
+        const dayReprocessed = dayTransformationsForRate.filter(t => t.reprocessing_count > 0).length;
+        const dayReprocessingRate = dayTransformationsForRate.length > 0 ? (dayReprocessed / dayTransformationsForRate.length) * 100 : 0;
 
         usageByDay.push({
           date: dateStr,
           transformations: dayTransformations,
           newSignups: daySignups,
-          reprocessingRate: 0 // TODO: Calculate actual reprocessing rate
+          reprocessingRate: dayReprocessingRate
         });
 
         revenueByDay.push({
@@ -285,6 +315,7 @@ const AdminDashboard = () => {
           .select('user_id')
           .in('user_id', signupUserIds)
           .eq('status', 'CONFIRMED')
+          .eq('billing_type', 'CREDIT_CARD')
       ]);
 
       const usersWithLastSignIn = currentUsers.filter((u: any) => u.last_sign_in_at).length;
@@ -300,7 +331,7 @@ const AdminDashboard = () => {
       const paymentStats = {
         pending: 0,
         confirmed: plansContracted,
-        totalValue: totalRevenue * 100 // Convert to cents
+        totalValue: totalRevenue
       };
 
       // Process recent transformations data and get user emails
